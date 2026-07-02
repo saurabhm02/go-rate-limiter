@@ -1,0 +1,26 @@
+# Binaries
+/server
+bin/
+*.exe
+*.test
+*.out
+
+# Cursor / codebase-memory tooling artifacts
+.codebase-memory/
+
+# Personal notes not meant for the public repo
+docs/learning/
+docs/superpowers/
+docs/RESUME_INTERVIEW_PREP.md
+docs/interview-guide.md
+
+# Env / secrets
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

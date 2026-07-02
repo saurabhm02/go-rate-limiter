@@ -1,0 +1,321 @@
+openapi: 3.0.3
+info:
+  title: Distributed Rate Limiter API
+  version: 1.0.0
+  description: |
+    Multi-tenant advisory rate limiting service.
+    Authenticate with `X-API-Key` on all endpoints except health and metrics.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: check
+    description: Rate limit evaluation
+  - name: config
+    description: Read-only tenant and rule configuration
+  - name: health
+    description: Liveness and readiness
+  - name: metrics
+    description: Prometheus scrape endpoint
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: unauthorized
+
+    CheckRequest:
+      type: object
+      required: [route]
+      properties:
+        route:
+          type: string
+          description: Logical route to evaluate against tenant rules
+          example: /api/payments/1
+        cost:
+          type: integer
+          format: int64
+          minimum: 1
+          default: 1
+          description: Units to consume from the limit
+
+    CheckResponse:
+      type: object
+      required: [allowed]
+      properties:
+        allowed:
+          type: boolean
+        limit:
+          type: integer
+          format: int64
+        remaining:
+          type: integer
+          format: int64
+        reset_at:
+          type: integer
+          format: int64
+          description: Unix timestamp when the limit fully resets
+        retry_after:
+          type: integer
+          format: int64
+          description: Seconds to wait before retry (when denied)
+        algorithm:
+          type: string
+          enum: [token_bucket, sliding_window]
+
+    Tenant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, suspended]
+
+    TenantList:
+      type: object
+      properties:
+        tenants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tenant'
+
+    Rule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        route_pattern:
+          type: string
+        algorithm:
+          type: string
+          enum: [token_bucket, sliding_window]
+        enabled:
+          type: boolean
+        limit_count:
+          type: integer
+          format: int64
+        window_seconds:
+          type: integer
+          format: int64
+        bucket_capacity:
+          type: integer
+          format: int64
+        refill_rate:
+          type: number
+          format: double
+
+    RuleList:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+
+paths:
+  /v1/check:
+    post:
+      tags: [check]
+      summary: Advisory rate limit check
+      description: |
+        Evaluates whether a request for the given route should be allowed.
+        Returns 200 when allowed, 429 when denied (with Retry-After).
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckRequest'
+      responses:
+        '200':
+          description: Request allowed
+          headers:
+            X-RateLimit-Limit:
+              schema: { type: string }
+            X-RateLimit-Remaining:
+              schema: { type: string }
+            X-RateLimit-Reset:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckResponse'
+        '400':
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema: { type: string }
+            X-RateLimit-Limit:
+              schema: { type: string }
+            X-RateLimit-Remaining:
+              schema: { type: string }
+            X-RateLimit-Reset:
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckResponse'
+        '503':
+          description: Rate limit backend unavailable (fail-closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/config/tenants:
+    get:
+      tags: [config]
+      summary: List tenants
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: Tenant list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantList'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /v1/config/tenants/{id}/rules:
+    get:
+      tags: [config]
+      summary: List rules for a tenant
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Rule list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuleList'
+        '400':
+          description: Invalid tenant ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Tenant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /health/live:
+    get:
+      tags: [health]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /health/ready:
+    get:
+      tags: [health]
+      summary: Readiness probe
+      description: Fails when PostgreSQL or Redis is unreachable.
+      responses:
+        '200':
+          description: Ready to serve traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  error:
+                    type: string
+
+  /metrics:
+    get:
+      tags: [metrics]
+      summary: Prometheus metrics
+      responses:
+        '200':
+          description: Prometheus text exposition format
+          content:
+            text/plain:
+              schema:
+                type: string

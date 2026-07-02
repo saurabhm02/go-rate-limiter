@@ -1,0 +1,58 @@
+name: Load Test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+
+jobs:
+  k6:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: true
+
+      - name: Start stack
+        run: docker compose -f deploy/docker/docker-compose.yml up -d --build
+
+      - name: Migrate
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U ratelimit -d ratelimit && break
+            sleep 2
+          done
+          DATABASE_URL="postgres://ratelimit:ratelimit@localhost:5432/ratelimit?sslmode=disable" go run ./cmd/migrate
+
+      - name: Wait for API
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8080/health/ready && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: k6 smoke
+        run: |
+          docker run --rm --network host \
+            -e BASE_URL=http://localhost:8080 \
+            -e API_KEY=rl_demo_abc123xyz \
+            -v "$PWD/load/k6:/scripts" \
+            grafana/k6:0.57.0 run /scripts/check_smoke.js
+
+      - name: k6 load
+        run: |
+          docker run --rm --network host \
+            -e BASE_URL=http://localhost:8080 \
+            -e API_KEY=rl_demo_abc123xyz \
+            -e RATE=500 \
+            -e DURATION=20s \
+            -v "$PWD/load/k6:/scripts" \
+            grafana/k6:0.57.0 run /scripts/check_load.js
+
+      - name: Stop stack
+        if: always()
+        run: docker compose -f deploy/docker/docker-compose.yml down

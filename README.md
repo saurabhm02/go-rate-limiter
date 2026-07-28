@@ -166,4 +166,3 @@ Go 1.25+ for local `make run` / `make migrate`.
 - [CONTEXT.md](CONTEXT.md) — domain glossary
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — REST contract
 - [docs/adr/](docs/adr/) — architecture decision records
-

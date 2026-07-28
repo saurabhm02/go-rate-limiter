@@ -167,6 +167,3 @@ Go 1.25+ for local `make run` / `make migrate`.
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — REST contract
 - [docs/adr/](docs/adr/) — architecture decision records
 
-## License
-
-MIT (or your choice — update as needed)

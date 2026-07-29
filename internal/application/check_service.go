@@ -27,7 +27,7 @@ func NewCheckService(rules ports.RuleRepository, resolver *RuleResolver, limiter
 }
 
 // Check evaluates whether a tenant request is allowed for the given route.
-func (s *CheckService) Check(ctx context.Context, tenantID uuid.UUID, route string, cost int64) (entity.RateLimitDecision, error) {
+func (s *CheckService) Check(ctx context.Context, tenantID uuid.UUID, route, subject string, cost int64) (entity.RateLimitDecision, error) {
 	if cost <= 0 {
 		cost = 1
 	}
@@ -42,7 +42,7 @@ func (s *CheckService) Check(ctx context.Context, tenantID uuid.UUID, route stri
 		return entity.RateLimitDecision{Allowed: true}, nil
 	}
 
-	key := entity.RateLimitKey{TenantID: tenantID, Route: route}
+	key := entity.RateLimitKey{TenantID: tenantID, Route: route, Subject: subject}
 	decision, err := s.limiter.Check(ctx, key, *rule, cost)
 	if err != nil {
 		if errors.Is(err, domainerrors.ErrRateLimitBackend) {

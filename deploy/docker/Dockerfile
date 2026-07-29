@@ -18,7 +18,9 @@ RUN apk add --no-cache ca-certificates wget \
 
 COPY --from=build /out/server /server
 COPY --from=build /out/migrate /migrate
+COPY --from=build /src/migrations /app/migrations
 
+WORKDIR /app
 USER 65532
 EXPOSE 8080
 

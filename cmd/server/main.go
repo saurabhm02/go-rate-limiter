@@ -7,10 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
-	goredis "github.com/redis/go-redis/v9"
 	"github.com/saurabh/distributed-rate-limiter/internal/application"
 	"github.com/saurabh/distributed-rate-limiter/internal/config"
 	"github.com/saurabh/distributed-rate-limiter/internal/infrastructure/cache"
@@ -41,8 +39,8 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	redisClient := goredis.NewClient(&goredis.Options{Addr: redisURLHost(cfg.RedisURL)})
-	if err := redisClient.Ping(ctx).Err(); err != nil {
+	redisClient, err := redisinfra.NewClient(ctx, cfg.RedisURL)
+	if err != nil {
 		slog.Error("redis connect failed", "error", err)
 		os.Exit(1)
 	}
@@ -103,16 +101,4 @@ func main() {
 		os.Exit(1)
 	}
 	slog.Info("server stopped")
-}
-
-// redisURLHost extracts host:port from redis://host:port/db style URLs.
-func redisURLHost(raw string) string {
-	raw = strings.TrimPrefix(raw, "redis://")
-	if i := strings.IndexByte(raw, '/'); i >= 0 {
-		raw = raw[:i]
-	}
-	if raw == "" {
-		return "localhost:6379"
-	}
-	return raw
 }

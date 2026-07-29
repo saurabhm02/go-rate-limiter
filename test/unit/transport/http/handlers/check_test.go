@@ -18,14 +18,18 @@ import (
 type mockChecker struct {
 	decision entity.RateLimitDecision
 	err      error
+
+	gotRoute   string
+	gotSubject string
 }
 
-func (m mockChecker) Check(ctx context.Context, tenantID uuid.UUID, route string, cost int64) (entity.RateLimitDecision, error) {
+func (m *mockChecker) Check(ctx context.Context, tenantID uuid.UUID, route, subject string, cost int64) (entity.RateLimitDecision, error) {
+	m.gotRoute, m.gotSubject = route, subject
 	return m.decision, m.err
 }
 
 func TestCheckHandlerAllowed(t *testing.T) {
-	h := handlers.NewCheckHandler(mockChecker{
+	h := handlers.NewCheckHandler(&mockChecker{
 		decision: entity.RateLimitDecision{
 			Allowed:   true,
 			Limit:     100,
@@ -59,7 +63,7 @@ func TestCheckHandlerAllowed(t *testing.T) {
 
 func TestCheckHandlerDenied(t *testing.T) {
 	retry := int64(30)
-	h := handlers.NewCheckHandler(mockChecker{
+	h := handlers.NewCheckHandler(&mockChecker{
 		decision: entity.RateLimitDecision{
 			Allowed:    false,
 			Limit:      100,
@@ -85,7 +89,7 @@ func TestCheckHandlerDenied(t *testing.T) {
 }
 
 func TestCheckHandlerInvalidBody(t *testing.T) {
-	h := handlers.NewCheckHandler(mockChecker{})
+	h := handlers.NewCheckHandler(&mockChecker{})
 	req := httptest.NewRequest(http.MethodPost, "/v1/check", bytes.NewBufferString(`{"route":""}`))
 	req = req.WithContext(httputil.WithTenantID(req.Context(), uuid.New()))
 	rec := httptest.NewRecorder()
@@ -96,8 +100,41 @@ func TestCheckHandlerInvalidBody(t *testing.T) {
 	}
 }
 
+func TestCheckHandlerForwardsSubject(t *testing.T) {
+	cases := map[string]struct {
+		body        string
+		wantSubject string
+	}{
+		"absent":     {`{"route":"/admitdesk/intake/apply"}`, ""},
+		"present":    {`{"route":"/admitdesk/intake/apply","subject":"203.0.113.7"}`, "203.0.113.7"},
+		"whitespace": {`{"route":"/admitdesk/intake/apply","subject":"  "}`, ""},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := &mockChecker{decision: entity.RateLimitDecision{Allowed: true}}
+			h := handlers.NewCheckHandler(m)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/check", bytes.NewBufferString(tc.body))
+			req = req.WithContext(httputil.WithTenantID(req.Context(), uuid.New()))
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if m.gotSubject != tc.wantSubject {
+				t.Fatalf("subject=%q want %q", m.gotSubject, tc.wantSubject)
+			}
+			if m.gotRoute != "/admitdesk/intake/apply" {
+				t.Fatalf("route=%q", m.gotRoute)
+			}
+		})
+	}
+}
+
 func TestCheckHandlerRedisDown(t *testing.T) {
-	h := handlers.NewCheckHandler(mockChecker{err: domainerrors.ErrRateLimitBackend})
+	h := handlers.NewCheckHandler(&mockChecker{err: domainerrors.ErrRateLimitBackend})
 	req := httptest.NewRequest(http.MethodPost, "/v1/check", bytes.NewBufferString(`{"route":"/api/payments"}`))
 	req = req.WithContext(httputil.WithTenantID(req.Context(), uuid.New()))
 	rec := httptest.NewRecorder()

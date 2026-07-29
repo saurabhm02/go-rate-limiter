@@ -3,6 +3,7 @@ import { check } from 'k6';
 
 const baseURL = __ENV.BASE_URL || 'http://localhost:8080';
 const apiKey = __ENV.API_KEY || 'rl_demo_abc123xyz';
+const route = __ENV.ROUTE || '/v1/check';
 
 // Target: sustain 1000 checks/sec for 30s against POST /v1/check.
 // Interpret results with: k6 handles status 200 (allowed) and 429 (denied) as success.
@@ -28,7 +29,7 @@ export const options = {
 export default function () {
   const res = http.post(
     `${baseURL}/v1/check`,
-    JSON.stringify({ route: '/v1/check', cost: 1 }),
+    JSON.stringify({ route, cost: 1 }),
     {
       headers: {
         'Content-Type': 'application/json',

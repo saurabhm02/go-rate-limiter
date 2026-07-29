@@ -18,7 +18,7 @@ import (
 
 // RateLimitChecker is the application seam used by the check HTTP handler.
 type RateLimitChecker interface {
-	Check(ctx context.Context, tenantID uuid.UUID, route string, cost int64) (entity.RateLimitDecision, error)
+	Check(ctx context.Context, tenantID uuid.UUID, route, subject string, cost int64) (entity.RateLimitDecision, error)
 }
 
 type CheckHandler struct {
@@ -31,7 +31,10 @@ func NewCheckHandler(checker RateLimitChecker) *CheckHandler {
 
 type checkRequest struct {
 	Route string `json:"route"`
-	Cost  int64  `json:"cost"`
+	// Subject is optional. It discriminates the counter (per IP, per account,
+	// ...) without affecting which rule matches — route stays the rule selector.
+	Subject string `json:"subject"`
+	Cost    int64  `json:"cost"`
 }
 
 type checkResponse struct {
@@ -74,12 +77,13 @@ func (h *CheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
+	req.Subject = strings.TrimSpace(req.Subject)
 	if req.Cost <= 0 {
 		req.Cost = 1
 	}
 
 	checkStart := time.Now()
-	decision, err := h.checker.Check(r.Context(), tenantID, req.Route, req.Cost)
+	decision, err := h.checker.Check(r.Context(), tenantID, req.Route, req.Subject, req.Cost)
 	observability.RecordRateLimitCheck(decision, err, time.Since(checkStart))
 	if err != nil {
 		if errors.Is(err, domainerrors.ErrRateLimitBackend) {

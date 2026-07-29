@@ -7,4 +7,5 @@ import "github.com/google/uuid"
 type RateLimitKey struct {
 	TenantID uuid.UUID
 	Route    string
+	Subject  string
 }

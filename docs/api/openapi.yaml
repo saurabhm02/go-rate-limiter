@@ -7,6 +7,8 @@ info:
     Authenticate with `X-API-Key` on all endpoints except health and metrics.
 
 servers:
+  - url: https://gorate.ixgo.in
+    description: Production
   - url: http://localhost:8080
     description: Local development
 
@@ -43,7 +45,17 @@ components:
         route:
           type: string
           description: Logical route to evaluate against tenant rules
-          example: /api/payments/1
+          example: /admitdesk/intake/apply
+        subject:
+          type: string
+          description: |
+            Optional bucket discriminator: client IP, account id, device id.
+            It splits the counter so two subjects on the same route consume
+            independent budgets, but it takes no part in rule resolution.
+            Omit it (or send an empty/blank string) to get one shared counter
+            per route, which is the behaviour of callers that predate this
+            field. Compared byte-for-byte after trimming, and case-sensitive.
+          example: 203.0.113.7
         cost:
           type: integer
           format: int64

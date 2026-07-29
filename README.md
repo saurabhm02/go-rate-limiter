@@ -160,8 +160,13 @@ unit          test/unit/         no external services
 
 Go 1.25+ for local `make run` / `make migrate`.
 
+## Benchmarks
+
+Sub-1.5ms p95 up to 2,000 req/s on a single local Docker container (allow and deny paths alike). Full numbers, methodology, and caveats: [docs/benchmarks.md](docs/benchmarks.md). Reproduce with `make benchmark`.
+
 ## Docs
 
+- [docs/benchmarks.md](docs/benchmarks.md) — load test results and methodology
 - [docs/architecture.md](docs/architecture.md) — deeper system design
 - [CONTEXT.md](CONTEXT.md) — domain glossary
 - [docs/api/openapi.yaml](docs/api/openapi.yaml) — REST contract

@@ -29,7 +29,7 @@ func TestCheckServiceWithSeedRules(t *testing.T) {
 	tenantID := uuid.MustParse("550e8400-e29b-41d4-a716-446655440000")
 
 	for i := 0; i < 10; i++ {
-		dec, err := checkSvc.Check(ctx, tenantID, "/api/payments/1", 1)
+		dec, err := checkSvc.Check(ctx, tenantID, "/api/payments/1", "", 1)
 		if err != nil {
 			t.Fatalf("check %d: %v", i, err)
 		}
@@ -38,7 +38,7 @@ func TestCheckServiceWithSeedRules(t *testing.T) {
 		}
 	}
 
-	dec, err := checkSvc.Check(ctx, tenantID, "/api/payments/1", 1)
+	dec, err := checkSvc.Check(ctx, tenantID, "/api/payments/1", "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestCheckServiceWithSeedRules(t *testing.T) {
 		t.Fatal("11th payment request should be denied")
 	}
 
-	dec, err = checkSvc.Check(ctx, tenantID, "/unknown-route", 1)
+	dec, err = checkSvc.Check(ctx, tenantID, "/unknown-route", "", 1)
 	if err != nil || !dec.Allowed {
 		t.Fatalf("default rule should allow /unknown-route dec=%+v err=%v", dec, err)
 	}

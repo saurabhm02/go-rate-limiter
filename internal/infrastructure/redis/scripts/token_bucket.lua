@@ -40,6 +40,10 @@ end
 
 redis.call('HSET', key, 'tokens', tokens, 'last_refill_ms', last_refill_ms)
 
+if refill_rate > 0 then
+  redis.call('EXPIRE', key, math.ceil(capacity / refill_rate) + 60)
+end
+
 local remaining = math.floor(tokens)
 local reset_at = math.floor(now_ms / 1000)
 if refill_rate > 0 and tokens < capacity then

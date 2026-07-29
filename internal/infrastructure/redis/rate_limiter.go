@@ -59,7 +59,7 @@ func (r *RateLimiter) Check(ctx context.Context, key entity.RateLimitKey, rule e
 		cost = 1
 	}
 
-	trk := TenantRouteKey{TenantID: key.TenantID, Route: key.Route}
+	trk := TenantRouteKey{TenantID: key.TenantID, Route: key.Route, Subject: key.Subject}
 
 	switch rule.Algorithm {
 	case entity.AlgorithmTokenBucket:

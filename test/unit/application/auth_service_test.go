@@ -99,7 +99,7 @@ func TestCheckServiceNoRuleAllows(t *testing.T) {
 		limiter,
 	)
 
-	dec, err := svc.Check(context.Background(), uuid.New(), "/unknown", 1)
+	dec, err := svc.Check(context.Background(), uuid.New(), "/unknown", "", 1)
 	if err != nil || !dec.Allowed {
 		t.Fatalf("dec=%+v err=%v", dec, err)
 	}
@@ -124,7 +124,7 @@ func TestCheckServiceUsesLimiterWhenRuleMatches(t *testing.T) {
 		limiter,
 	)
 
-	dec, err := svc.Check(context.Background(), tenantID, "/api/payments/1", 1)
+	dec, err := svc.Check(context.Background(), tenantID, "/api/payments/1", "", 1)
 	if err != nil || !dec.Allowed || dec.Remaining != 9 {
 		t.Fatalf("dec=%+v err=%v", dec, err)
 	}

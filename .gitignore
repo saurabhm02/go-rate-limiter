@@ -17,6 +17,7 @@ docs/interview-guide.md
 # Env / secrets
 .env
 .env.*
+.secrets/
 
 # IDE
 .idea/

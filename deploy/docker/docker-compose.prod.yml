@@ -3,16 +3,8 @@
 
 services:
   migrate:
-    build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
-    entrypoint: ["/migrate"]
     environment:
-      DATABASE_URL: postgres://ratelimit:ratelimit@postgres:5432/ratelimit?sslmode=disable
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
+      SEED: ""
 
   ratelimit:
     environment:

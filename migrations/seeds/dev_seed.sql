@@ -60,5 +60,16 @@ VALUES
         NULL,
         NULL,
         true
+    ),
+    (
+        '770e8400-e29b-41d4-a716-446655440005',
+        '550e8400-e29b-41d4-a716-446655440000',
+        '/bench',
+        'sliding_window',
+        1000000,
+        60,
+        NULL,
+        NULL,
+        true
     )
 ON CONFLICT (tenant_id, route_pattern) DO NOTHING;

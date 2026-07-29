@@ -12,7 +12,7 @@ Load tests for `POST /v1/check` using [Grafana k6](https://k6.io/).
 | Script | Purpose |
 |--------|---------|
 | `check_smoke.js` | 5 VUs × 10s — quick sanity check |
-| `check_load.js` | 1000 req/s × 30s — sustained load (`constant-arrival-rate`) |
+| `check_load.js` | 1000 req/s × 30s — sustained load (`constant-arrival-rate`); `ROUTE` env picks target route |
 
 ## Environment
 
@@ -22,12 +22,14 @@ Load tests for `POST /v1/check` using [Grafana k6](https://k6.io/).
 | `API_KEY` | `rl_demo_abc123xyz` | Tenant API key |
 | `RATE` | `1000` | Arrival rate for load script (req/s) |
 | `DURATION` | `30s` | Load test duration |
+| `ROUTE` | `/v1/check` | Route sent in the request body; `/bench` (seeded, high limit) isolates allow-path throughput from demo rule limits |
 
 ## Run
 
 ```bash
 make loadtest-smoke
 make loadtest
+make benchmark   # tiered RATE against /bench; see docs/benchmarks.md for recorded results
 ```
 
 ## Interpreting results

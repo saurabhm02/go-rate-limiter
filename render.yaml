@@ -1,0 +1,23 @@
+
+services:
+  - name: gorate
+    type: web
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./deploy/docker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/ready
+    autoDeployTrigger: commit
+    envVars:
+      - key: MIGRATIONS_DIR
+        value: /app/migrations
+      - key: HTTP_PORT
+        value: "8080"
+      - key: LOG_LEVEL
+        value: info
+
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false

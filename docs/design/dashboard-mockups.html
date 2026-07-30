@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="en" data-palette="#3987e5,#d95926">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gorate dashboard — four concepts</title>
+<style>
+  :root {
+    --plane:      #0d0d0d;
+    --surface:    #1a1a19;
+    --surface-2:  #212120;
+    --ink:        #ffffff;
+    --ink-2:      #c3c2b7;
+    --muted:      #898781;
+    --grid:       #2c2c2a;
+    --baseline:   #383835;
+    --border:     rgba(255,255,255,0.10);
+    --series-1:   #3987e5;   /* allowed  */
+    --series-2:   #d95926;   /* denied   */
+    --good:       #0ca30c;
+    --critical:   #d03b3b;
+    --radius:     10px;
+    --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font-family: var(--font); font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1,h2,h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+  /* ---------- shell ---------- */
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 20px 80px; }
+  .intro { margin-bottom: 24px; }
+  .intro h1 { font-size: 22px; }
+  .intro p { color: var(--ink-2); margin: 8px 0 0; max-width: 62ch; }
+
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 24px 0 20px;
+          border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .tab {
+    appearance: none; border: 1px solid var(--border); background: transparent;
+    color: var(--ink-2); font: inherit; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+  }
+  .tab:hover { background: var(--surface-2); color: var(--ink); }
+  .tab[aria-selected="true"] { background: var(--ink); color: var(--plane);
+                               border-color: var(--ink); font-weight: 600; }
+  .tab small { display: block; font-size: 11px; opacity: .7; font-weight: 400; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .verdict {
+    border: 1px solid var(--border); border-left: 3px solid var(--series-1);
+    background: var(--surface); border-radius: 0 var(--radius) var(--radius) 0;
+    padding: 14px 16px; margin-bottom: 22px; color: var(--ink-2); font-size: 13px;
+  }
+  .verdict b { color: var(--ink); }
+
+  /* ---------- app chrome (the mockup itself) ---------- */
+  .app { border: 1px solid var(--border); border-radius: var(--radius);
+         background: var(--surface); overflow: hidden; }
+  .appbar {
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border); background: var(--surface-2);
+  }
+  .logo { font-weight: 700; letter-spacing: -0.02em; }
+  .chip {
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px;
+    font-size: 12.5px; color: var(--ink-2); background: var(--surface);
+  }
+  .spacer { flex: 1; }
+  .body { padding: 20px 16px 22px; }
+
+  .sect { margin-bottom: 28px; }
+  .sect:last-child { margin-bottom: 0; }
+  .sect-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .sect-head h3 { font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+                  color: var(--muted); font-weight: 600; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  .btn {
+    appearance: none; border: 1px solid var(--border); background: var(--surface-2);
+    color: var(--ink); font: inherit; font-size: 13px; padding: 7px 13px;
+    border-radius: 7px; cursor: pointer;
+  }
+  .btn:hover { background: #2a2a28; }
+  .btn.primary { background: var(--ink); color: var(--plane); border-color: var(--ink); font-weight: 600; }
+  .btn.primary:hover { opacity: .9; }
+  .btn.ghost { background: transparent; }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+       color: var(--muted); font-weight: 600; padding: 0 10px 8px; border-bottom: 1px solid var(--grid); }
+  td { padding: 11px 10px; border-bottom: 1px solid var(--grid); color: var(--ink-2); }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.pattern { color: var(--ink); font-family: var(--mono); font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .dot.on  { background: var(--good); }
+  .dot.off { background: var(--baseline); }
+
+  /* ---------- route tester ---------- */
+  .tester { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tester input {
+    flex: 1; min-width: 240px; background: var(--plane); border: 1px solid var(--border);
+    color: var(--ink); font-family: var(--mono); font-size: 13px;
+    padding: 9px 11px; border-radius: 7px;
+  }
+  .tester input:focus { outline: 2px solid var(--series-1); outline-offset: -1px; }
+  .result { margin-top: 12px; padding: 12px 14px; border-radius: 8px;
+            background: var(--plane); border: 1px solid var(--border); font-size: 13px; }
+  .result .hit { color: var(--ink); font-family: var(--mono); }
+  .result .why { color: var(--muted); font-size: 12px; margin-top: 5px; }
+
+  /* ---------- cards / wizard (B) ---------- */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px,1fr)); gap: 12px; }
+  .card { border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 16px; background: var(--surface-2); }
+  .card h4 { margin: 0 0 4px; font-size: 15px; }
+  .card .meta { color: var(--muted); font-size: 12.5px; }
+  .card.dashed { border-style: dashed; display: flex; flex-direction: column;
+                 justify-content: center; align-items: center; text-align: center;
+                 color: var(--muted); cursor: pointer; }
+  .card.dashed:hover { border-color: var(--ink-2); color: var(--ink-2); }
+
+  .steps { display: flex; align-items: center; gap: 0; margin: 4px 0 22px; }
+  .step { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12.5px; }
+  .step .bead { width: 11px; height: 11px; border-radius: 50%; background: var(--baseline); }
+  .step.done .bead, .step.now .bead { background: var(--series-1); }
+  .step.now { color: var(--ink); font-weight: 600; }
+  .step-line { flex: 1; height: 1px; background: var(--baseline); margin: 0 10px; }
+  .step-line.done { background: var(--series-1); }
+
+  .presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; }
+  .preset { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
+            background: var(--surface-2); cursor: pointer; transition: border-color .12s, transform .12s; }
+  .preset:hover { border-color: var(--ink-2); transform: translateY(-1px); }
+  .preset[data-sel="1"] { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1); }
+  .preset .ico { font-size: 20px; }
+  .preset h4 { margin: 9px 0 5px; font-size: 14.5px; }
+  .preset p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .preset .val { margin-top: 9px; color: var(--ink-2); font-family: var(--mono); font-size: 12px; }
+
+  /* ---------- yaml (C) ---------- */
+  .split { display: grid; grid-template-columns: 1.35fr 1fr; gap: 0;
+           border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  @media (max-width: 780px) { .split { grid-template-columns: 1fr; } }
+  .editor { background: var(--plane); padding: 14px 0; font-family: var(--mono);
+            font-size: 12.5px; line-height: 1.75; overflow-x: auto; }
+  .ln { display: flex; gap: 14px; padding: 0 14px; white-space: pre; }
+  .ln:hover { background: rgba(255,255,255,.03); }
+  .ln .n { color: var(--baseline); user-select: none; min-width: 18px; text-align: right; }
+  .ln.warn { background: rgba(217,89,38,.10); }
+  .k { color: var(--series-1); }
+  .v { color: var(--ink); }
+  .c { color: var(--muted); font-style: italic; }
+  .side { background: var(--surface-2); padding: 16px; border-left: 1px solid var(--border); }
+  .side h3 { font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+             color: var(--muted); margin-bottom: 12px; }
+  .prev { font-family: var(--mono); font-size: 12px; margin-bottom: 13px; }
+  .prev .r { color: var(--ink); }
+  .prev .a { color: var(--ink-2); padding-left: 12px; }
+  .prev .a.none { color: var(--muted); }
+  .warnbox { border-left: 2px solid var(--series-2); background: rgba(217,89,38,.10);
+             padding: 9px 11px; border-radius: 0 6px 6px 0; color: var(--ink-2); font-size: 12.5px; }
+
+  /* ---------- stats + chart (D) ---------- */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; }
+  .stat { border: 1px solid var(--border); border-radius: var(--radius);
+          padding: 14px 16px; background: var(--surface-2); }
+  .stat .label { color: var(--muted); font-size: 11.5px; letter-spacing: .05em;
+                 text-transform: uppercase; font-weight: 600; }
+  .stat .value { font-size: 27px; font-weight: 600; margin-top: 5px; letter-spacing: -0.02em; }
+  .stat .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .chart { border: 1px solid var(--border); border-radius: var(--radius);
+           background: var(--surface-2); padding: 16px; }
+  .legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; }
+
+  .series { margin-bottom: 16px; }
+  .series:last-of-type { margin-bottom: 0; }
+  .series-head { display: flex; justify-content: space-between; align-items: baseline;
+                 font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .series-head b { color: var(--ink-2); font-weight: 600; }
+  .plot { display: flex; align-items: flex-end; gap: 2px; height: 54px;
+          border-bottom: 1px solid var(--baseline); position: relative; }
+  .bar { flex: 1; border-radius: 4px 4px 0 0; min-height: 2px; position: relative; cursor: pointer; }
+  .bar:hover { filter: brightness(1.35); }
+  .bar.a { background: var(--series-1); }
+  .bar.d { background: var(--series-2); }
+  .xaxis { display: flex; justify-content: space-between; color: var(--muted);
+           font-size: 11px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  #tip { position: fixed; pointer-events: none; opacity: 0; transition: opacity .1s;
+         background: var(--plane); border: 1px solid var(--border); border-radius: 7px;
+         padding: 7px 10px; font-size: 12px; z-index: 50; white-space: nowrap;
+         box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  #tip .t { color: var(--muted); font-size: 11px; }
+  #tip .r { display: flex; gap: 8px; align-items: center; margin-top: 3px; color: var(--ink); }
+
+  details.table-view { margin-top: 14px; }
+  details.table-view summary { color: var(--muted); font-size: 12.5px; cursor: pointer; }
+  details.table-view table { margin-top: 10px; font-size: 12.5px; }
+
+  .keyrow { display: flex; align-items: center; gap: 12px; padding: 11px 10px;
+            border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .keyrow:last-child { border-bottom: 0; }
+  .keyrow .kname { color: var(--ink); font-weight: 500; min-width: 90px; }
+  .keyrow .kval { font-family: var(--mono); color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="intro">
+    <h1>gorate dashboard — four concepts</h1>
+    <p>Same backend, same capability. What differs is the information architecture:
+       what the main screen is, and who the tool is pretending to be built for.
+       Data is fake; the route tester in concept A runs the real resolution logic.
+       Dark-only on purpose — these are for picking a layout, not a theme.</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  data-p="a">A · Operator console<small>dense, one screen</small></button>
+    <button class="tab" role="tab" aria-selected="false" data-p="b">B · Guided SaaS<small>onboarding-first</small></button>
+    <button class="tab" role="tab" aria-selected="false" data-p="c">C · Config-as-code<small>YAML + preview</small></button>
+    <button class="tab" role="tab" aria-selected="false" data-p="d">D · Traffic-first<small>charts, then rules</small></button>
+  </div>
+
+  <!-- ================= A ================= -->
+  <section class="panel active" id="p-a">
+    <div class="verdict"><b>Least to build, fastest to use, worst first impression.</b>
+      Everything on one screen, rules sorted in the order they are actually evaluated.
+      A newcomer sees a spreadsheet; you see everything at once.</div>
+
+    <div class="app">
+      <div class="appbar">
+        <span class="logo">gorate</span>
+        <span class="chip">admitdesk ▾</span>
+        <span class="spacer"></span>
+        <span class="chip">saurabh ▾</span>
+      </div>
+      <div class="body">
+
+        <div class="sect">
+          <div class="sect-head"><h3>Rules</h3><span class="spacer"></span>
+            <button class="btn primary">+ Add rule</button></div>
+          <div class="scroll">
+          <table>
+            <thead><tr><th>Pattern</th><th>Algorithm</th><th>Limit</th><th>Window</th><th>Subject</th><th>On</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="pattern">/admitdesk/intake/*</td><td>sliding window</td><td class="num">5</td><td>10 min</td><td>client IP</td><td><span class="dot on"></span></td><td>⋯</td></tr>
+              <tr><td class="pattern">/admitdesk/signup/*</td><td>sliding window</td><td class="num">3</td><td>60 min</td><td>client IP</td><td><span class="dot on"></span></td><td>⋯</td></tr>
+              <tr><td class="pattern">/admitdesk/login/*</td><td>sliding window</td><td class="num">10</td><td>15 min</td><td>account id</td><td><span class="dot on"></span></td><td>⋯</td></tr>
+              <tr><td class="pattern">*</td><td>sliding window</td><td class="num">1000</td><td>1 hour</td><td>—</td><td><span class="dot off"></span></td><td>⋯</td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p class="note">Sorted by specificity — the order rules are evaluated in. Changes take effect within 30 seconds.</p>
+        </div>
+
+        <div class="sect">
+          <div class="sect-head"><h3>Test a route</h3></div>
+          <div class="tester">
+            <input id="rt" value="/admitdesk/intake/apply" spellcheck="false" aria-label="Route to test">
+            <button class="btn" id="rt-go">Test</button>
+          </div>
+          <div class="result" id="rt-out"></div>
+          <p class="note">Dry run against the rules above. No counter is consumed.</p>
+        </div>
+
+        <div class="sect">
+          <div class="sect-head"><h3>Keys</h3><span class="spacer"></span>
+            <button class="btn">+ New key</button></div>
+          <div class="keyrow"><span class="kname">production</span>
+            <span class="kval">rl_admitdesk_••••••••••••3f9a</span><span class="spacer"></span>
+            <span class="note" style="margin:0">last used 2 min ago</span>
+            <button class="btn ghost">Revoke</button></div>
+          <div class="keyrow"><span class="kname">staging</span>
+            <span class="kval">rl_admitdesk_••••••••••••b71c</span><span class="spacer"></span>
+            <span class="note" style="margin:0">never used</span>
+            <button class="btn ghost">Revoke</button></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= B ================= -->
+  <section class="panel" id="p-b">
+    <div class="verdict"><b>Most to build, best for people who aren't you.</b>
+      Presets carry the judgement — "per account, not per IP, so one attacker can't
+      lock out a whole office" — that is otherwise tribal knowledge.</div>
+
+    <div class="app" style="margin-bottom:18px">
+      <div class="appbar"><span class="logo">gorate</span><span class="spacer"></span><span class="chip">saurabh ▾</span></div>
+      <div class="body">
+        <div class="sect-head"><h3>Your projects</h3><span class="spacer"></span>
+          <button class="btn primary">+ New project</button></div>
+        <div class="cards">
+          <div class="card">
+            <h4>admitdesk</h4>
+            <div class="meta" style="margin-bottom:8px"><span class="dot on"></span> healthy</div>
+            <div class="meta">4 rules · 2 keys</div>
+            <div class="meta">1,204 checks / 24h · 3.1% denied</div>
+          </div>
+          <div class="card dashed"><div style="font-size:22px">+</div>
+            <div style="margin-top:6px">New project</div>
+            <div class="meta" style="margin-top:4px">~2 minutes</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app">
+      <div class="appbar"><span class="logo">New project</span><span class="spacer"></span>
+        <span class="chip">step 2 of 3</span></div>
+      <div class="body">
+        <div class="steps">
+          <span class="step done"><span class="bead"></span> Name</span>
+          <span class="step-line done"></span>
+          <span class="step now"><span class="bead"></span> Rules</span>
+          <span class="step-line"></span>
+          <span class="step"><span class="bead"></span> Key</span>
+        </div>
+        <h3 style="font-size:16px;margin-bottom:4px">What are you protecting?</h3>
+        <p class="note" style="margin:0 0 16px">Pick one or more. You can change every number afterwards.</p>
+        <div class="presets">
+          <div class="preset" data-sel="1"><div class="ico">🔑</div><h4>Login</h4>
+            <p>Slow down brute force without locking out a shared office IP.</p>
+            <div class="val">10 / 15 min · per account</div></div>
+          <div class="preset"><div class="ico">📝</div><h4>Public form</h4>
+            <p>Stop scripted spam on a form anyone can reach.</p>
+            <div class="val">5 / 10 min · per IP</div></div>
+          <div class="preset"><div class="ico">💸</div><h4>Expensive call</h4>
+            <p>Cap anything that costs you money per request.</p>
+            <div class="val">20 / 1 hour · per account</div></div>
+          <div class="preset"><div class="ico">⚙️</div><h4>Custom</h4>
+            <p>I know the pattern and numbers I want.</p>
+            <div class="val">&nbsp;</div></div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px">
+          <button class="btn ghost">Back</button><button class="btn primary">Continue →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= C ================= -->
+  <section class="panel" id="p-c">
+    <div class="verdict"><b>Config stays diffable — which is what ADR-006 was protecting.</b>
+      Fastest for bulk edits. But a YAML editor is the migration workflow with nicer
+      paint; it does not make onboarding easier for anyone new.</div>
+
+    <div class="app">
+      <div class="appbar"><span class="logo">admitdesk</span>
+        <span class="chip">Visual | <b style="color:var(--ink)">YAML</b></span>
+        <span class="spacer"></span><button class="btn primary">Save changes</button></div>
+      <div class="body">
+        <div class="split">
+          <div class="editor">
+            <div class="ln"><span class="n">1</span><span class="k">rules:</span></div>
+            <div class="ln"><span class="n">2</span>  - <span class="k">pattern:</span> <span class="v">/admitdesk/intake/*</span></div>
+            <div class="ln"><span class="n">3</span>    <span class="k">algorithm:</span> <span class="v">sliding_window</span></div>
+            <div class="ln"><span class="n">4</span>    <span class="k">limit:</span> <span class="v">5</span></div>
+            <div class="ln"><span class="n">5</span>    <span class="k">window:</span> <span class="v">10m</span></div>
+            <div class="ln"><span class="n">6</span>    <span class="c"># subject: client IP (caller decides)</span></div>
+            <div class="ln"><span class="n">7</span></div>
+            <div class="ln"><span class="n">8</span>  - <span class="k">pattern:</span> <span class="v">/admitdesk/login/*</span></div>
+            <div class="ln"><span class="n">9</span>    <span class="k">algorithm:</span> <span class="v">sliding_window</span></div>
+            <div class="ln"><span class="n">10</span>    <span class="k">limit:</span> <span class="v">10</span></div>
+            <div class="ln"><span class="n">11</span>    <span class="k">window:</span> <span class="v">15m</span></div>
+            <div class="ln"><span class="n">12</span></div>
+            <div class="ln"><span class="n">13</span>  - <span class="k">pattern:</span> <span class="v">"*"</span></div>
+            <div class="ln"><span class="n">14</span>    <span class="k">algorithm:</span> <span class="v">sliding_window</span></div>
+            <div class="ln warn"><span class="n">15</span>    <span class="k">window:</span> <span class="v">1h</span></div>
+          </div>
+          <div class="side">
+            <h3>Match preview</h3>
+            <div class="prev"><div class="r">/admitdesk/intake/apply</div>
+              <div class="a">→ line 2 · 5 per 10 min</div></div>
+            <div class="prev"><div class="r">/admitdesk/login/password</div>
+              <div class="a">→ line 8 · 10 per 15 min</div></div>
+            <div class="prev"><div class="r">/anything/else</div>
+              <div class="a none">→ no rule · allowed</div></div>
+            <div class="warnbox"><b>line 15</b> — window without limit.
+              Sliding window needs both; this rule would be rejected.</div>
+            <p class="note">Changes take effect within 30 seconds of saving.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= D ================= -->
+  <section class="panel" id="p-d">
+    <div class="verdict"><b>The one you'll actually want at 2am — and the one that needs new backend.</b>
+      Per-rule and per-subject history isn't stored today; Prometheus counters are
+      aggregate and in-memory. That's a bigger change than the whole dashboard.</div>
+
+    <div class="app">
+      <div class="appbar"><span class="logo">admitdesk</span><span class="spacer"></span>
+        <span class="chip">1h</span><span class="chip" style="color:var(--ink);border-color:var(--ink-2)">24h</span><span class="chip">7d</span></div>
+      <div class="body">
+
+        <div class="sect">
+          <div class="stats">
+            <div class="stat"><div class="label">Checks</div><div class="value">1,204</div><div class="sub">last 24 hours</div></div>
+            <div class="stat"><div class="label">Denied</div><div class="value" style="color:var(--series-2)">38</div><div class="sub">3.1% of checks</div></div>
+            <div class="stat"><div class="label">p95 latency</div><div class="value">42<span style="font-size:16px;color:var(--muted)"> ms</span></div><div class="sub">check endpoint</div></div>
+            <div class="stat"><div class="label">Active rules</div><div class="value">3</div><div class="sub">1 disabled</div></div>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-head"><h3>Allowed and denied over time</h3></div>
+          <div class="chart">
+            <div class="legend">
+              <span><i class="swatch" style="background:var(--series-1)"></i> Allowed</span>
+              <span><i class="swatch" style="background:var(--series-2)"></i> Denied</span>
+            </div>
+            <!-- Two small multiples, not a stack: denied is ~3% of allowed and
+                 would be invisible sharing one scale. Each has its own peak label. -->
+            <div class="series">
+              <div class="series-head"><b>Allowed</b><span>peak 94 / hour</span></div>
+              <div class="plot" id="plot-a"></div>
+            </div>
+            <div class="series">
+              <div class="series-head"><b>Denied</b><span>peak 24 / hour</span></div>
+              <div class="plot" id="plot-d"></div>
+              <div class="xaxis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>now</span></div>
+            </div>
+            <details class="table-view">
+              <summary>View as table</summary>
+              <div class="scroll"><table id="tbl"><thead><tr><th>Hour</th><th>Allowed</th><th>Denied</th></tr></thead><tbody></tbody></table></div>
+            </details>
+          </div>
+        </div>
+
+        <div class="sect">
+          <div class="sect-head"><h3>By rule</h3></div>
+          <div class="scroll">
+          <table>
+            <thead><tr><th>Pattern</th><th>Checks</th><th>Denied</th><th>Rate</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="pattern">/admitdesk/intake/*</td><td class="num">892</td><td class="num">31</td><td class="num" style="color:var(--series-2)">3.5%</td><td><button class="btn ghost">Edit</button></td></tr>
+              <tr><td class="pattern">/admitdesk/login/*</td><td class="num">301</td><td class="num">7</td><td class="num">2.3%</td><td><button class="btn ghost">Edit</button></td></tr>
+              <tr><td class="pattern">/admitdesk/signup/*</td><td class="num">11</td><td class="num">0</td><td class="num">0%</td><td><button class="btn ghost">Edit</button></td></tr>
+              <tr><td class="pattern">*</td><td class="num">0</td><td class="num">0</td><td class="num" style="color:var(--muted)">unused</td><td><button class="btn ghost">Edit</button></td></tr>
+            </tbody>
+          </table>
+          </div>
+          <p class="note">Edit a limit while looking at what that limit is doing.</p>
+        </div>
+
+        <div class="sect">
+          <div class="sect-head"><h3>Top denied subjects</h3></div>
+          <div class="scroll">
+          <table>
+            <thead><tr><th>Subject</th><th>Denials</th><th>Rule</th></tr></thead>
+            <tbody>
+              <tr><td class="pattern">203.0.113.7</td><td class="num">28</td><td>/admitdesk/intake/*</td></tr>
+              <tr><td class="pattern">198.51.100.9</td><td class="num">6</td><td>/admitdesk/intake/*</td></tr>
+              <tr><td class="pattern">acct_9f21</td><td class="num">4</td><td>/admitdesk/login/*</td></tr>
+            </tbody>
+          </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</div>
+<div id="tip" role="status"></div>
+
+<script>
+// ---------- tabs ----------
+document.querySelectorAll('.tab').forEach(function (t) {
+  t.addEventListener('click', function () {
+    document.querySelectorAll('.tab').forEach(function (x) { x.setAttribute('aria-selected', 'false'); });
+    t.setAttribute('aria-selected', 'true');
+    document.querySelectorAll('.panel').forEach(function (p) { p.classList.remove('active'); });
+    document.getElementById('p-' + t.dataset.p).classList.add('active');
+  });
+});
+
+// ---------- route tester: the real resolution logic ----------
+// Mirrors Rule.Specificity in internal/domain/entity/rule.go:
+//   exact  -> 1000 + len(pattern)   prefix -> len(prefix)   "*" -> 1   none -> 0
+var RULES = [
+  { pattern: '/admitdesk/intake/*', limit: 5,    window: '10 min' },
+  { pattern: '/admitdesk/signup/*', limit: 3,    window: '60 min' },
+  { pattern: '/admitdesk/login/*',  limit: 10,   window: '15 min' },
+  { pattern: '*',                   limit: 1000, window: '1 hour', enabled: false }
+];
+
+function specificity(pattern, route) {
+  if (pattern === '*') return 1;
+  if (pattern.endsWith('*')) {
+    var prefix = pattern.slice(0, -1);
+    return route.startsWith(prefix) ? prefix.length : 0;
+  }
+  return route === pattern ? 1000 + pattern.length : 0;
+}
+
+function resolve(route) {
+  var best = null, bestScore = 0, runnerUp = null;
+  RULES.forEach(function (r) {
+    if (r.enabled === false) return;
+    var s = specificity(r.pattern, route);
+    if (s <= 0) return;
+    if (s > bestScore) { runnerUp = best; bestScore = s; best = r; }
+    else if (!runnerUp) { runnerUp = r; }
+  });
+  return { rule: best, score: bestScore, runnerUp: runnerUp };
+}
+
+function test() {
+  var route = document.getElementById('rt').value.trim();
+  var out = document.getElementById('rt-out');
+  if (!route) { out.innerHTML = '<span class="why">Enter a route.</span>'; return; }
+
+  var res = resolve(route);
+  if (!res.rule) {
+    out.innerHTML = '<div class="hit" style="color:var(--muted)">✕ No rule matches → allowed</div>' +
+      '<div class="why">Rate limiting is opt-in. An unmatched route is never limited.</div>';
+    return;
+  }
+  var why = 'specificity ' + res.score;
+  if (res.runnerUp) {
+    why += ' · beat ' + res.runnerUp.pattern + ' (' + specificity(res.runnerUp.pattern, route) + ')';
+  }
+  out.innerHTML =
+    '<div class="hit"><span style="color:var(--good)">✓</span> ' + res.rule.pattern + '</div>' +
+    '<div class="why">' + res.rule.limit + ' per ' + res.rule.window + ' · ' + why + '</div>';
+}
+document.getElementById('rt-go').addEventListener('click', test);
+document.getElementById('rt').addEventListener('input', test);
+test();
+
+// ---------- concept D: chart ----------
+var ALLOWED = [31,24,19,15,12,9,14,22,71,94,66,58,49,53,61,57,44,48,52,60,55,47,39,34];
+var DENIED  = [0,0,0,0,0,0,0,1,24,9,2,0,0,0,1,0,0,0,0,1,0,0,0,0];
+
+function draw(id, data, cls, label) {
+  var host = document.getElementById(id);
+  var max = Math.max.apply(null, data) || 1;
+  data.forEach(function (v, i) {
+    var b = document.createElement('div');
+    b.className = 'bar ' + cls;
+    b.style.height = Math.max(2, Math.round(v / max * 54)) + 'px';
+    b.dataset.hour = i;
+    b.dataset.label = label;
+    host.appendChild(b);
+  });
+}
+draw('plot-a', ALLOWED, 'a', 'Allowed');
+draw('plot-d', DENIED, 'd', 'Denied');
+
+var tip = document.getElementById('tip');
+document.querySelectorAll('.bar').forEach(function (b) {
+  b.addEventListener('mouseenter', function (e) {
+    var h = +b.dataset.hour;
+    tip.innerHTML = '<div class="t">' + String(h).padStart(2, '0') + ':00 – ' +
+      String(h).padStart(2, '0') + ':59</div>' +
+      '<div class="r"><i class="swatch" style="background:var(--series-1)"></i> Allowed ' + ALLOWED[h] + '</div>' +
+      '<div class="r"><i class="swatch" style="background:var(--series-2)"></i> Denied ' + DENIED[h] + '</div>';
+    tip.style.opacity = '1';
+  });
+  b.addEventListener('mousemove', function (e) {
+    tip.style.left = Math.min(e.clientX + 14, window.innerWidth - 190) + 'px';
+    tip.style.top = (e.clientY - 60) + 'px';
+  });
+  b.addEventListener('mouseleave', function () { tip.style.opacity = '0'; });
+});
+
+var tb = document.querySelector('#tbl tbody');
+ALLOWED.forEach(function (v, i) {
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td class="num">' + String(i).padStart(2, '0') + ':00</td>' +
+                 '<td class="num">' + v + '</td><td class="num">' + DENIED[i] + '</td>';
+  tb.appendChild(tr);
+});
+</script>
+</body>
+</html>

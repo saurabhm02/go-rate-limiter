@@ -5,16 +5,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/saurabh/distributed-rate-limiter/internal/domain/ports"
-	"github.com/saurabh/distributed-rate-limiter/internal/infrastructure/postgres"
 	"github.com/saurabh/distributed-rate-limiter/pkg/httputil"
 )
 
 type ConfigHandler struct {
-	tenants *postgres.TenantRepository
+	tenants ports.TenantRepository
 	rules   ports.RuleRepository
 }
 
-func NewConfigHandler(tenants *postgres.TenantRepository, rules ports.RuleRepository) *ConfigHandler {
+func NewConfigHandler(tenants ports.TenantRepository, rules ports.RuleRepository) *ConfigHandler {
 	return &ConfigHandler{tenants: tenants, rules: rules}
 }
 
@@ -25,38 +24,51 @@ type tenantResponse struct {
 }
 
 type ruleResponse struct {
-	ID            string  `json:"id"`
-	RoutePattern  string  `json:"route_pattern"`
-	Algorithm     string  `json:"algorithm"`
-	Enabled       bool    `json:"enabled"`
-	LimitCount    int64   `json:"limit_count,omitempty"`
-	WindowSeconds int64   `json:"window_seconds,omitempty"`
-	BucketCapacity int64  `json:"bucket_capacity,omitempty"`
-	RefillRate    float64 `json:"refill_rate,omitempty"`
+	ID             string  `json:"id"`
+	RoutePattern   string  `json:"route_pattern"`
+	Algorithm      string  `json:"algorithm"`
+	Enabled        bool    `json:"enabled"`
+	LimitCount     int64   `json:"limit_count,omitempty"`
+	WindowSeconds  int64   `json:"window_seconds,omitempty"`
+	BucketCapacity int64   `json:"bucket_capacity,omitempty"`
+	RefillRate     float64 `json:"refill_rate,omitempty"`
 }
 
 func (h *ConfigHandler) ListTenants(w http.ResponseWriter, r *http.Request) {
-	tenants, err := h.tenants.List(r.Context())
+	tenantID, ok := httputil.TenantIDFromContext(r.Context())
+	if !ok {
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tenant, err := h.tenants.GetByID(r.Context(), tenantID)
 	if err != nil {
 		httputil.WriteError(w, http.StatusServiceUnavailable, "service_unavailable")
 		return
 	}
 
-	out := make([]tenantResponse, 0, len(tenants))
-	for _, t := range tenants {
-		out = append(out, tenantResponse{
-			ID:     t.ID.String(),
-			Name:   t.Name,
-			Status: string(t.Status),
-		})
-	}
+	out := []tenantResponse{{
+		ID:     tenant.ID.String(),
+		Name:   tenant.Name,
+		Status: string(tenant.Status),
+	}}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"tenants": out})
 }
 
 func (h *ConfigHandler) ListTenantRules(w http.ResponseWriter, r *http.Request) {
+	authTenantID, ok := httputil.TenantIDFromContext(r.Context())
+	if !ok {
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	tenantID, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if tenantID != authTenantID {
+		httputil.WriteError(w, http.StatusNotFound, "tenant_not_found")
 		return
 	}
 

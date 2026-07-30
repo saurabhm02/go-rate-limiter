@@ -9,4 +9,6 @@ var (
 	ErrAPIKeyRevoked    = errors.New("api key revoked")
 	ErrInvalidRule      = errors.New("invalid rule")
 	ErrRateLimitBackend = errors.New("rate limit backend unavailable")
+	ErrProjectExists    = errors.New("project already exists")
+	ErrInvalidInput     = errors.New("invalid input")
 )

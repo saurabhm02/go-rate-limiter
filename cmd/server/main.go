@@ -57,6 +57,11 @@ func main() {
 		os.Exit(1)
 	}
 	checkService := application.NewCheckService(ruleRepo, application.NewRuleResolver(), rateLimiter)
+	provisioning := application.NewProvisioningService(postgres.NewProjectRepository(pgPool))
+
+	if cfg.AdminToken == "" {
+		slog.Warn("ADMIN_TOKEN not set — the project write API is disabled")
+	}
 
 	deps := httptransport.Dependencies{
 		HealthCheckers: []handlers.HealthChecker{
@@ -67,6 +72,10 @@ func main() {
 		Tenants: tenantRepo,
 		Rules:   ruleRepo,
 		Check:   checkService,
+
+		Projects:         provisioning,
+		AdminToken:       cfg.AdminToken,
+		DashboardOrigins: cfg.DashboardOrigins,
 	}
 
 	server := &http.Server{

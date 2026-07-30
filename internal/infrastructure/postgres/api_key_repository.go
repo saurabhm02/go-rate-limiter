@@ -52,30 +52,6 @@ func NewTenantRepository(pool *pgxpool.Pool) *TenantRepository {
 	return &TenantRepository{pool: pool}
 }
 
-func (r *TenantRepository) List(ctx context.Context) ([]entity.Tenant, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, status
-		FROM tenants
-		ORDER BY name
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("list tenants: %w", err)
-	}
-	defer rows.Close()
-
-	var tenants []entity.Tenant
-	for rows.Next() {
-		var t entity.Tenant
-		var status string
-		if err := rows.Scan(&t.ID, &t.Name, &status); err != nil {
-			return nil, fmt.Errorf("scan tenant: %w", err)
-		}
-		t.Status = entity.TenantStatus(status)
-		tenants = append(tenants, t)
-	}
-	return tenants, rows.Err()
-}
-
 func (r *TenantRepository) GetByID(ctx context.Context, tenantID uuid.UUID) (*entity.Tenant, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, name, status

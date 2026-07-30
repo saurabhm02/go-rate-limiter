@@ -1,0 +1,22 @@
+# this si for render to make it live for always
+name: keepalive
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /health/live
+        run: |
+          # --max-time 90 rides out a cold start rather than failing the run if
+          # the instance did manage to fall asleep.
+          curl -fsS --max-time 90 --retry 2 --retry-delay 10 \
+            https://gorate.onrender.com/health/live

@@ -36,7 +36,7 @@ func NewProvisioningService(projects ports.ProjectStore) *ProvisioningService {
 //
 // We only ever receive the hash of the key. The real key is made in the browser
 // and shown to the person once, so it never lands in our logs or a backup.
-func (s *ProvisioningService) CreateProject(ctx context.Context, name, keyHash, keyPrefix string, rules []entity.Rule) (uuid.UUID, error) {
+func (s *ProvisioningService) CreateProject(ctx context.Context, name, keyHash, keyPrefix string, keyRole entity.APIKeyRole, rules []entity.Rule) (uuid.UUID, error) {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if !projectNameRe.MatchString(name) {
 		return uuid.Nil, fmt.Errorf("%w: name must be 3-40 chars, lowercase letters, digits and hyphens, not starting or ending with a hyphen", domainerrors.ErrInvalidInput)
@@ -75,11 +75,16 @@ func (s *ProvisioningService) CreateProject(ctx context.Context, name, keyHash, 
 		}
 	}
 
+	if keyRole != entity.RoleAdmin && keyRole != entity.RoleCheck {
+		keyRole = entity.RoleAdmin
+	}
+
 	p := ports.NewProject{
 		TenantID:  tenantID,
 		Name:      name,
 		KeyHash:   keyHash,
 		KeyPrefix: keyPrefix,
+		KeyRole:   keyRole,
 		Rules:     rules,
 	}
 	if err := s.projects.CreateProject(ctx, p); err != nil {
@@ -95,7 +100,7 @@ func (s *ProvisioningService) ListProjects(ctx context.Context) ([]ports.Project
 
 // AddAPIKey adds another key to an existing project. Same checks as creating
 // one, since this is just as much a way in.
-func (s *ProvisioningService) AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string) error {
+func (s *ProvisioningService) AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string, role entity.APIKeyRole) error {
 	keyHash = strings.ToLower(strings.TrimSpace(keyHash))
 	if !sha256HexRe.MatchString(keyHash) {
 		return fmt.Errorf("%w: key_hash must be 64 lowercase hex characters (sha256)", domainerrors.ErrInvalidInput)
@@ -104,10 +109,18 @@ func (s *ProvisioningService) AddAPIKey(ctx context.Context, tenantID uuid.UUID,
 	if keyPrefix == "" || len(keyPrefix) > 32 {
 		return fmt.Errorf("%w: key_prefix must be 1-32 characters", domainerrors.ErrInvalidInput)
 	}
-	return s.projects.AddAPIKey(ctx, tenantID, keyHash, keyPrefix)
+	if role != entity.RoleAdmin && role != entity.RoleCheck {
+		return fmt.Errorf("%w: role must be admin or check", domainerrors.ErrInvalidInput)
+	}
+	return s.projects.AddAPIKey(ctx, tenantID, keyHash, keyPrefix, role)
 }
 
 // RevokeAPIKey turns a key off without losing the record of it.
 func (s *ProvisioningService) RevokeAPIKey(ctx context.Context, tenantID, keyID uuid.UUID) error {
 	return s.projects.RevokeAPIKey(ctx, tenantID, keyID)
+}
+
+// GetProject loads the one project a console session belongs to.
+func (s *ProvisioningService) GetProject(ctx context.Context, tenantID uuid.UUID) (*ports.ProjectSummary, error) {
+	return s.projects.GetProject(ctx, tenantID)
 }

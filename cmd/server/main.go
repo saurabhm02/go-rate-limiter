@@ -74,6 +74,9 @@ func main() {
 		Check:   checkService,
 
 		Projects:         provisioning,
+		Console:          provisioning,
+		AuthService:      authService,
+		BehindProxy:      cfg.BehindProxy,
 		AdminToken:       cfg.AdminToken,
 		DashboardOrigins: cfg.DashboardOrigins,
 	}

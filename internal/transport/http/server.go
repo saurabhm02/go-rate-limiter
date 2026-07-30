@@ -2,8 +2,10 @@ package httptransport
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/saurabh/distributed-rate-limiter/internal/application"
 	"github.com/saurabh/distributed-rate-limiter/internal/domain/ports"
 	"github.com/saurabh/distributed-rate-limiter/internal/transport/http/handlers"
 	"github.com/saurabh/distributed-rate-limiter/internal/transport/http/middleware"
@@ -20,6 +22,11 @@ type Dependencies struct {
 	Projects         handlers.ProjectCreator
 	AdminToken       string
 	DashboardOrigins []string
+
+	Console     handlers.ProjectService
+	AuthService *application.AuthService
+
+	BehindProxy bool
 }
 
 func NewMux(deps Dependencies) http.Handler {
@@ -30,13 +37,29 @@ func NewMux(deps Dependencies) http.Handler {
 	mux.HandleFunc("GET /health/ready", health.Ready)
 
 	if deps.Check != nil {
-		check := handlers.NewCheckHandler(deps.Check)
+		var check http.Handler = handlers.NewCheckHandler(deps.Check)
+		if deps.AuthService != nil {
+			check = middleware.RequireCheckRole(deps.AuthService, check)
+		}
 		mux.Handle("POST /v1/check", check)
 	}
 
 	config := handlers.NewConfigHandler(deps.Tenants, deps.Rules)
 	mux.HandleFunc("GET /v1/config/tenants", config.ListTenants)
 	mux.HandleFunc("GET /v1/config/tenants/{id}/rules", config.ListTenantRules)
+
+	if deps.Console != nil && deps.AuthService != nil {
+		console := handlers.NewProjectHandler(deps.Console)
+
+		mux.Handle("POST /v1/projects", middleware.SignupLimit(
+			5, time.Hour, deps.BehindProxy, http.HandlerFunc(console.Create)))
+		scoped := func(h http.HandlerFunc) http.Handler {
+			return middleware.ProjectAuth(deps.AuthService, h)
+		}
+		mux.Handle("GET /v1/projects/me", scoped(console.Me))
+		mux.Handle("POST /v1/projects/me/keys", scoped(console.AddKey))
+		mux.Handle("DELETE /v1/projects/me/keys/{keyId}", scoped(console.RevokeKey))
+	}
 
 	if deps.Projects != nil && deps.AdminToken != "" {
 		admin := handlers.NewAdminHandler(deps.Projects)

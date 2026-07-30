@@ -1,12 +1,13 @@
 import { Button, Copyable, Modal } from './ui'
 import { API_BASE } from '../api'
 
-export function KeyReveal({ open, projectName, rawKey, onClose, onCopied }) {
+export function KeyReveal({ open, projectName, rawKey, kind = 'api', onClose, onCopied }) {
+  const isProject = kind === 'project'
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={`API key for ${projectName}`}
+      title={isProject ? `Project token for ${projectName}` : `API key for ${projectName}`}
       footer={
         <Button variant="primary" onClick={onClose}>
           I've saved it
@@ -18,9 +19,19 @@ export function KeyReveal({ open, projectName, rawKey, onClose, onCopied }) {
 
         <div className="rounded-r-lg border-l-2 border-warn bg-warn/10 px-3.5 py-3 text-[12.5px] leading-relaxed text-dim">
           <b className="text-ink">This is the only time it is shown.</b> Only its SHA-256 hash
-          reached the server, so it cannot be recovered — losing it means minting a new one.
+          reached the server, so it cannot be recovered.
+          {isProject
+            ? ' Save it somewhere safe. It is how you get back into this project.'
+            : ' Put it in your app. Losing it means minting another.'}
         </div>
 
+        {isProject ? (
+          <p className="text-[12.5px] leading-relaxed text-faint">
+            This token manages the project. It cannot call <code className="text-dim">/v1/check</code> —
+            mint a separate API key for your app, so a key leaking from a deployed
+            service can never raise its own limits.
+          </p>
+        ) : (
         <div>
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
             Use it like this
@@ -37,6 +48,7 @@ export function KeyReveal({ open, projectName, rawKey, onClose, onCopied }) {
             gets its own budget.
           </p>
         </div>
+        )}
       </div>
     </Modal>
   )

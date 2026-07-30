@@ -130,11 +130,11 @@ export function ProjectDetail({ project, onMintKey, onRevokeKey, busy }) {
       <section>
         <div className="mb-2.5 flex items-center gap-3">
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
-            API keys
+            Keys
           </h3>
           <div className="flex-1" />
           <Button disabled={busy} onClick={() => onMintKey(project)}>
-            + Mint new key
+            + New API key
           </Button>
         </div>
         <div className="overflow-hidden rounded-xl border border-line bg-surface">
@@ -150,6 +150,7 @@ export function ProjectDetail({ project, onMintKey, onRevokeKey, busy }) {
                 className="flex flex-wrap items-center gap-3 border-b border-line/60 px-4 py-3 last:border-0"
               >
                 <code className="font-mono text-[13px] text-dim">{k.prefix}••••••••</code>
+                {k.role === 'admin' ? <Pill tone="brand">project token</Pill> : <Pill>api key</Pill>}
                 {k.status === 'active' ? <Pill tone="good">active</Pill> : <Pill tone="bad">revoked</Pill>}
                 <span className="text-xs text-faint">
                   {new Date(k.created_at).toLocaleDateString()}
@@ -165,7 +166,9 @@ export function ProjectDetail({ project, onMintKey, onRevokeKey, busy }) {
           </AnimatePresence>
         </div>
         <p className="mt-2 text-xs text-faint">
-          To rotate without downtime: mint a new key, deploy it, then revoke the old one.
+          The project token manages this page. API keys are what your app ships with —
+          only they can call /v1/check. To rotate without downtime: mint a new API key,
+          deploy it, then revoke the old one.
         </p>
       </section>
     </motion.div>

@@ -27,20 +27,21 @@ func NewAPIKeyRepository(pool *pgxpool.Pool) *APIKeyRepository {
 
 func (r *APIKeyRepository) FindByHash(ctx context.Context, keyHash string) (*entity.APIKey, error) {
 	row := r.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, key_prefix, status
+		SELECT id, tenant_id, key_prefix, status, COALESCE(role, 'check')
 		FROM api_keys
 		WHERE key_hash = $1
 	`, keyHash)
 
 	var key entity.APIKey
-	var status string
-	if err := row.Scan(&key.ID, &key.TenantID, &key.KeyPrefix, &status); err != nil {
+	var status, role string
+	if err := row.Scan(&key.ID, &key.TenantID, &key.KeyPrefix, &status, &role); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domainerrors.ErrAPIKeyNotFound
 		}
 		return nil, fmt.Errorf("find api key: %w", err)
 	}
 	key.Status = entity.APIKeyStatus(status)
+	key.Role = entity.APIKeyRole(role)
 	return &key, nil
 }
 

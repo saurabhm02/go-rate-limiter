@@ -19,6 +19,7 @@ type spyProjects struct {
 
 	addedKeyFor uuid.UUID
 	addedHash   string
+	addedRole   entity.APIKeyRole
 }
 
 func (s *spyProjects) CreateProject(_ context.Context, p ports.NewProject) error {
@@ -30,9 +31,13 @@ func (s *spyProjects) ListProjects(context.Context) ([]ports.ProjectSummary, err
 	return nil, s.err
 }
 
-func (s *spyProjects) AddAPIKey(_ context.Context, tenantID uuid.UUID, keyHash, keyPrefix string) error {
-	s.addedKeyFor, s.addedHash = tenantID, keyHash
+func (s *spyProjects) AddAPIKey(_ context.Context, tenantID uuid.UUID, keyHash, keyPrefix string, role entity.APIKeyRole) error {
+	s.addedKeyFor, s.addedHash, s.addedRole = tenantID, keyHash, role
 	return s.err
+}
+
+func (s *spyProjects) GetProject(context.Context, uuid.UUID) (*ports.ProjectSummary, error) {
+	return nil, s.err
 }
 
 func (s *spyProjects) RevokeAPIKey(context.Context, uuid.UUID, uuid.UUID) error {
@@ -55,7 +60,7 @@ func TestCreateProjectWritesEverythingTogether(t *testing.T) {
 	spy := &spyProjects{}
 	svc := application.NewProvisioningService(spy)
 
-	id, err := svc.CreateProject(context.Background(), "  MyApp  ", goodHash, "rl_myapp_", goodRules())
+	id, err := svc.CreateProject(context.Background(), "  MyApp  ", goodHash, "rl_myapp_", entity.RoleAdmin, goodRules())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -109,7 +114,7 @@ func TestCreateProjectRejectsBadInput(t *testing.T) {
 			spy := &spyProjects{}
 			svc := application.NewProvisioningService(spy)
 
-			_, err := svc.CreateProject(context.Background(), tc.name, tc.hash, tc.prefix, tc.rules)
+			_, err := svc.CreateProject(context.Background(), tc.name, tc.hash, tc.prefix, entity.RoleAdmin, tc.rules)
 			if err == nil {
 				t.Fatal("expected rejection")
 			}
@@ -133,7 +138,7 @@ func TestCreateProjectRejectsDuplicatePatterns(t *testing.T) {
 		{RoutePattern: "/a/*", Algorithm: entity.AlgorithmSlidingWindow, Enabled: true, LimitCount: 1, WindowSeconds: 60},
 		{RoutePattern: "/a/*", Algorithm: entity.AlgorithmSlidingWindow, Enabled: true, LimitCount: 2, WindowSeconds: 60},
 	}
-	_, err := svc.CreateProject(context.Background(), "myapp", goodHash, "rl_", rules)
+	_, err := svc.CreateProject(context.Background(), "myapp", goodHash, "rl_", entity.RoleAdmin, rules)
 	if err == nil || !strings.Contains(err.Error(), "/a/*") {
 		t.Fatalf("want a duplicate error naming the pattern, got %v", err)
 	}
@@ -143,7 +148,7 @@ func TestCreateProjectPropagatesConflict(t *testing.T) {
 	spy := &spyProjects{err: domainerrors.ErrProjectExists}
 	svc := application.NewProvisioningService(spy)
 
-	_, err := svc.CreateProject(context.Background(), "myapp", goodHash, "rl_", goodRules())
+	_, err := svc.CreateProject(context.Background(), "myapp", goodHash, "rl_", entity.RoleAdmin, goodRules())
 	if !errors.Is(err, domainerrors.ErrProjectExists) {
 		t.Fatalf("want ErrProjectExists so the handler can answer 409, got %v", err)
 	}
@@ -158,7 +163,7 @@ func TestCreateProjectAcceptsTokenBucket(t *testing.T) {
 		RoutePattern: "/pay/*", Algorithm: entity.AlgorithmTokenBucket, Enabled: true,
 		BucketCapacity: 10, RefillRate: 2,
 	}}
-	if _, err := svc.CreateProject(context.Background(), "payments", goodHash, "rl_pay_", rules); err != nil {
+	if _, err := svc.CreateProject(context.Background(), "payments", goodHash, "rl_pay_", entity.RoleAdmin, rules); err != nil {
 		t.Fatalf("valid token bucket rejected: %v", err)
 	}
 }
@@ -177,7 +182,7 @@ func TestAddAPIKeyValidatesTheHash(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			spy := &spyProjects{}
 			svc := application.NewProvisioningService(spy)
-			err := svc.AddAPIKey(context.Background(), tenantID, hash, "rl_x_")
+			err := svc.AddAPIKey(context.Background(), tenantID, hash, "rl_x_", entity.RoleCheck)
 
 			if name == "uppercase ok" {
 				// Normalised to lowercase rather than rejected.
@@ -196,5 +201,32 @@ func TestAddAPIKeyValidatesTheHash(t *testing.T) {
 				t.Fatal("invalid hash reached the store")
 			}
 		})
+	}
+}
+
+func TestCreateProjectStoresTheKeyRole(t *testing.T) {
+	spy := &spyProjects{}
+	svc := application.NewProvisioningService(spy)
+
+	if _, err := svc.CreateProject(context.Background(), "myapp", goodHash, "rl_", entity.RoleAdmin, goodRules()); err != nil {
+		t.Fatal(err)
+	}
+	if spy.got.KeyRole != entity.RoleAdmin {
+		t.Fatalf("first key role = %q, want admin", spy.got.KeyRole)
+	}
+}
+
+// A junk role must not reach the database, where the CHECK constraint would
+// reject it with an unhelpful error.
+func TestAddAPIKeyRejectsUnknownRole(t *testing.T) {
+	spy := &spyProjects{}
+	svc := application.NewProvisioningService(spy)
+
+	err := svc.AddAPIKey(context.Background(), uuid.New(), goodHash, "rl_", entity.APIKeyRole("superuser"))
+	if !errors.Is(err, domainerrors.ErrInvalidInput) {
+		t.Fatalf("want ErrInvalidInput, got %v", err)
+	}
+	if spy.addedHash != "" {
+		t.Fatal("bad role reached the store")
 	}
 }

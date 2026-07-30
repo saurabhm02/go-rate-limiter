@@ -16,9 +16,10 @@ import (
 )
 
 type ProjectCreator interface {
-	CreateProject(ctx context.Context, name, keyHash, keyPrefix string, rules []entity.Rule) (uuid.UUID, error)
+	CreateProject(ctx context.Context, name, keyHash, keyPrefix string, keyRole entity.APIKeyRole, rules []entity.Rule) (uuid.UUID, error)
 	ListProjects(ctx context.Context) ([]ports.ProjectSummary, error)
-	AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string) error
+	GetProject(ctx context.Context, tenantID uuid.UUID) (*ports.ProjectSummary, error)
+	AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string, role entity.APIKeyRole) error
 	RevokeAPIKey(ctx context.Context, tenantID, keyID uuid.UUID) error
 }
 
@@ -83,7 +84,7 @@ func (h *AdminHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	tenantID, err := h.projects.CreateProject(r.Context(), req.Name, req.KeyHash, req.KeyPrefix, rules)
+	tenantID, err := h.projects.CreateProject(r.Context(), req.Name, req.KeyHash, req.KeyPrefix, entity.RoleAdmin, rules)
 	if err != nil {
 		switch {
 		case errors.Is(err, domainerrors.ErrProjectExists):
@@ -107,6 +108,7 @@ type keyView struct {
 	ID        string `json:"id"`
 	Prefix    string `json:"prefix"`
 	Status    string `json:"status"`
+	Role      string `json:"role"`
 	CreatedAt string `json:"created_at"`
 }
 
@@ -168,6 +170,7 @@ func (h *AdminHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 				ID:        k.ID.String(),
 				Prefix:    k.Prefix,
 				Status:    k.Status,
+				Role:      k.Role,
 				CreatedAt: k.CreatedAt.UTC().Format(time.RFC3339),
 			})
 		}
@@ -200,7 +203,7 @@ func (h *AdminHandler) AddKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	switch err := h.projects.AddAPIKey(r.Context(), tenantID, req.KeyHash, req.KeyPrefix); {
+	switch err := h.projects.AddAPIKey(r.Context(), tenantID, req.KeyHash, req.KeyPrefix, entity.RoleCheck); {
 	case err == nil:
 		w.WriteHeader(http.StatusCreated)
 	case errors.Is(err, domainerrors.ErrTenantNotFound):

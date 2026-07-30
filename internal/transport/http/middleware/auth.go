@@ -41,7 +41,7 @@ func PublicPaths(path string) bool {
 
 func AuthOrPublic(auth *AuthMiddleware, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if PublicPaths(r.URL.Path) || IsAdminPath(r.URL.Path) {
+		if PublicPaths(r.URL.Path) || IsAdminPath(r.URL.Path) || IsProjectPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}

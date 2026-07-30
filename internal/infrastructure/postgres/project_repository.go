@@ -41,9 +41,9 @@ func (r *ProjectRepository) CreateProject(ctx context.Context, p ports.NewProjec
 	}
 
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO api_keys (tenant_id, key_hash, key_prefix, status)
-		VALUES ($1, $2, $3, 'active')
-	`, p.TenantID, p.KeyHash, p.KeyPrefix); err != nil {
+		INSERT INTO api_keys (tenant_id, key_hash, key_prefix, status, role)
+		VALUES ($1, $2, $3, 'active', $4)
+	`, p.TenantID, p.KeyHash, p.KeyPrefix, string(p.KeyRole)); err != nil {
 		return wrapUnique(err, "insert api key")
 	}
 
@@ -111,7 +111,7 @@ func (r *ProjectRepository) ListProjects(ctx context.Context) ([]ports.ProjectSu
 	}
 
 	keyRows, err := r.pool.Query(ctx, `
-		SELECT id, tenant_id, key_prefix, status, created_at
+		SELECT id, tenant_id, key_prefix, status, COALESCE(role, 'check'), created_at
 		FROM api_keys
 		ORDER BY created_at
 	`)
@@ -122,7 +122,7 @@ func (r *ProjectRepository) ListProjects(ctx context.Context) ([]ports.ProjectSu
 	for keyRows.Next() {
 		var tenantID uuid.UUID
 		var k ports.KeySummary
-		if err := keyRows.Scan(&k.ID, &tenantID, &k.Prefix, &k.Status, &k.CreatedAt); err != nil {
+		if err := keyRows.Scan(&k.ID, &tenantID, &k.Prefix, &k.Status, &k.Role, &k.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan key: %w", err)
 		}
 		if i, ok := index[tenantID]; ok {
@@ -163,12 +163,12 @@ func (r *ProjectRepository) ListProjects(ctx context.Context) ([]ports.ProjectSu
 
 // AddAPIKey adds another key to a project that already exists. This is how you
 // rotate a key without downtime: add the new one, ship it, then revoke the old.
-func (r *ProjectRepository) AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string) error {
+func (r *ProjectRepository) AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string, role entity.APIKeyRole) error {
 	tag, err := r.pool.Exec(ctx, `
-		INSERT INTO api_keys (tenant_id, key_hash, key_prefix, status)
-		SELECT $1, $2, $3, 'active'
+		INSERT INTO api_keys (tenant_id, key_hash, key_prefix, status, role)
+		SELECT $1, $2, $3, 'active', $4
 		WHERE EXISTS (SELECT 1 FROM tenants WHERE id = $1)
-	`, tenantID, keyHash, keyPrefix)
+	`, tenantID, keyHash, keyPrefix, string(role))
 	if err != nil {
 		return wrapUnique(err, "insert api key")
 	}
@@ -218,4 +218,59 @@ func nullIfZeroFloat(v float64) any {
 		return nil
 	}
 	return v
+}
+
+func (r *ProjectRepository) GetProject(ctx context.Context, tenantID uuid.UUID) (*ports.ProjectSummary, error) {
+	var p ports.ProjectSummary
+	if err := r.pool.QueryRow(ctx, `
+		SELECT id, name, status, created_at FROM tenants WHERE id = $1
+	`, tenantID).Scan(&p.ID, &p.Name, &p.Status, &p.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domainerrors.ErrTenantNotFound
+		}
+		return nil, fmt.Errorf("get tenant: %w", err)
+	}
+
+	keyRows, err := r.pool.Query(ctx, `
+		SELECT id, key_prefix, status, COALESCE(role, 'check'), created_at
+		FROM api_keys WHERE tenant_id = $1 ORDER BY created_at
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("get keys: %w", err)
+	}
+	defer keyRows.Close()
+	for keyRows.Next() {
+		var k ports.KeySummary
+		if err := keyRows.Scan(&k.ID, &k.Prefix, &k.Status, &k.Role, &k.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan key: %w", err)
+		}
+		p.Keys = append(p.Keys, k)
+	}
+	if err := keyRows.Err(); err != nil {
+		return nil, err
+	}
+
+	ruleRows, err := r.pool.Query(ctx, `
+		SELECT id, tenant_id, route_pattern, algorithm,
+		       COALESCE(limit_count, 0), COALESCE(window_seconds, 0),
+		       COALESCE(bucket_capacity, 0), COALESCE(refill_rate, 0), enabled
+		FROM rules WHERE tenant_id = $1 ORDER BY route_pattern
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("get rules: %w", err)
+	}
+	defer ruleRows.Close()
+	for ruleRows.Next() {
+		var rule entity.Rule
+		var algorithm string
+		if err := ruleRows.Scan(&rule.ID, &rule.TenantID, &rule.RoutePattern, &algorithm,
+			&rule.LimitCount, &rule.WindowSeconds, &rule.BucketCapacity, &rule.RefillRate,
+			&rule.Enabled); err != nil {
+			return nil, fmt.Errorf("scan rule: %w", err)
+		}
+		rule.Algorithm = entity.Algorithm(algorithm)
+		p.Rules = append(p.Rules, rule)
+		p.RuleCount++
+	}
+	return &p, ruleRows.Err()
 }

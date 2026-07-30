@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -142,5 +143,48 @@ func TestCheckHandlerRedisDown(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status=%d", rec.Code)
+	}
+}
+
+func TestCheckHandlerRejectsOversizedInput(t *testing.T) {
+	cases := map[string]string{
+		"route too long":   `{"route":"/` + strings.Repeat("a", 600) + `"}`,
+		"subject too long": `{"route":"/ok","subject":"` + strings.Repeat("b", 300) + `"}`,
+		"absurd cost":      `{"route":"/ok","cost":9223372036854775807}`,
+	}
+
+	for name, body := range cases {
+		t.Run(name, func(t *testing.T) {
+			m := &mockChecker{decision: entity.RateLimitDecision{Allowed: true}}
+			h := handlers.NewCheckHandler(m)
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/check", bytes.NewBufferString(body))
+			req = req.WithContext(httputil.WithTenantID(req.Context(), uuid.New()))
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d want 400", rec.Code)
+			}
+			if m.gotRoute != "" {
+				t.Fatal("oversized input reached the limiter")
+			}
+		})
+	}
+}
+
+// The bounds must not reject anything a real caller would send.
+func TestCheckHandlerAcceptsNormalInput(t *testing.T) {
+	m := &mockChecker{decision: entity.RateLimitDecision{Allowed: true}}
+	h := handlers.NewCheckHandler(m)
+
+	body := `{"route":"/admitdesk/intake/apply","subject":"2001:db8:85a3::8a2e:370:7334","cost":5}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/check", bytes.NewBufferString(body))
+	req = req.WithContext(httputil.WithTenantID(req.Context(), uuid.New()))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

@@ -16,6 +16,7 @@ type Config struct {
 	// AdminToken guards the write API.
 	AdminToken       string
 	DashboardOrigins []string
+	BehindProxy      bool
 	RuleCacheTTL     time.Duration
 	ShutdownTimeout  time.Duration
 }
@@ -51,6 +52,11 @@ func Load() (Config, error) {
 	}
 
 	cfg.AdminToken = os.Getenv("ADMIN_TOKEN")
+
+	cfg.BehindProxy = true
+	if v := os.Getenv("BEHIND_PROXY"); v == "false" || v == "0" {
+		cfg.BehindProxy = false
+	}
 
 	if v := os.Getenv("DASHBOARD_ORIGINS"); v != "" {
 		for _, o := range strings.Split(v, ",") {

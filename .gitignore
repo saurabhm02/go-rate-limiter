@@ -25,3 +25,16 @@ docs/interview-guide.md
 
 # OS
 .DS_Store
+
+# Dashboard build artefacts
+web/node_modules/
+web/dist/
+web/.vite/
+
+.wrangler/
+.dev.vars
+
+# Local tool output
+*.log
+coverage.out
+.tmp-*/

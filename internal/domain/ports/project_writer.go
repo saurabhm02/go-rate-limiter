@@ -13,13 +13,16 @@ type NewProject struct {
 	Name      string
 	KeyHash   string
 	KeyPrefix string
-	Rules     []entity.Rule
+
+	KeyRole entity.APIKeyRole
+	Rules   []entity.Rule
 }
 
 type KeySummary struct {
 	ID        uuid.UUID
 	Prefix    string
 	Status    string
+	Role      string
 	CreatedAt time.Time
 }
 
@@ -36,6 +39,7 @@ type ProjectSummary struct {
 type ProjectStore interface {
 	CreateProject(ctx context.Context, p NewProject) error
 	ListProjects(ctx context.Context) ([]ProjectSummary, error)
-	AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string) error
+	GetProject(ctx context.Context, tenantID uuid.UUID) (*ProjectSummary, error)
+	AddAPIKey(ctx context.Context, tenantID uuid.UUID, keyHash, keyPrefix string, role entity.APIKeyRole) error
 	RevokeAPIKey(ctx context.Context, tenantID, keyID uuid.UUID) error
 }

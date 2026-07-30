@@ -29,6 +29,12 @@ func NewCheckHandler(checker RateLimitChecker) *CheckHandler {
 	return &CheckHandler{checker: checker}
 }
 
+const (
+	maxRouteLen   = 512
+	maxSubjectLen = 256
+	maxCost       = 1_000_000
+)
+
 type checkRequest struct {
 	Route string `json:"route"`
 	// Subject is optional. It discriminates the counter (per IP, per account,
@@ -73,13 +79,24 @@ func (h *CheckHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	req.Route = strings.TrimSpace(req.Route)
-	if req.Route == "" {
+	if req.Route == "" || len(req.Route) > maxRouteLen {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
+
 	req.Subject = strings.TrimSpace(req.Subject)
+	if len(req.Subject) > maxSubjectLen {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
 	if req.Cost <= 0 {
 		req.Cost = 1
+	}
+	if req.Cost > maxCost {
+
+		httputil.WriteError(w, http.StatusBadRequest, "invalid_request")
+		return
 	}
 
 	checkStart := time.Now()

@@ -1,6 +1,6 @@
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE || 'https://gorate.onrender.com'
+  import.meta.env.VITE_API_BASE || 'https://api-gorate.1xgo.in'
 
 const TOKEN_KEY = 'gorate.token'
 
@@ -25,6 +25,27 @@ export class ApiError extends Error {
     this.status = status
     this.code = code
   }
+}
+
+async function requestPublic(path, body) {
+  let res
+  try {
+    res = await fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new ApiError(0, 'unreachable')
+  }
+  let data = null
+  try {
+    data = await res.json()
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok) throw new ApiError(res.status, data?.error)
+  return data
 }
 
 async function request(path, { method = 'GET', body } = {}) {
@@ -53,20 +74,21 @@ async function request(path, { method = 'GET', body } = {}) {
   return data
 }
 
-export const listProjects = () =>
-  request('/v1/admin/projects').then((d) => d?.projects ?? [])
-
 export const createProject = (payload) =>
-  request('/v1/admin/projects', { method: 'POST', body: payload })
+  requestPublic('/v1/projects', payload)
 
-export const addKey = (projectId, payload) =>
-  request(`/v1/admin/projects/${projectId}/keys`, { method: 'POST', body: payload })
+// Everything after that is scoped by the key you signed in with. There is no
+// project id in these paths, so a session cannot reach another project.
+export const loadProject = () => request('/v1/projects/me')
 
-export const revokeKey = (projectId, keyId) =>
-  request(`/v1/admin/projects/${projectId}/keys/${keyId}`, { method: 'DELETE' })
+export const mintKey = (payload) =>
+  request('/v1/projects/me/keys', { method: 'POST', body: payload })
+
+export const revokeKey = (keyId) =>
+  request(`/v1/projects/me/keys/${keyId}`, { method: 'DELETE' })
 
 
-export async function generateKey(projectName) {
+export async function generateKey(projectName, kind = 'key') {
   const bytes = new Uint8Array(24)
   crypto.getRandomValues(bytes)
   const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')

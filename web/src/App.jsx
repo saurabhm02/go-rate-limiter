@@ -1,103 +1,133 @@
 import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  API_BASE, ApiError, addKey, createProject, generateKey,
-  getToken, listProjects, revokeKey, setToken,
+  API_BASE, ApiError, createProject, generateKey, getToken,
+  loadProject, mintKey, revokeKey, setToken,
 } from './api'
 import { Button, Field, Pill, Spinner, Toast, inputCls, spring, useToast } from './components/ui'
 import { NewProject } from './components/NewProject'
 import { KeyReveal } from './components/KeyReveal'
 import { ProjectDetail } from './components/ProjectDetail'
 
-function Gate({ onUnlock, error, busy }) {
+function friendly(err) {
+  if (!(err instanceof ApiError)) return 'Something went wrong.'
+  switch (err.code) {
+    case 'unreachable':
+      return 'Could not reach the API. It can take 30–60s to wake up. Try again.'
+    case 'project_exists':
+      return 'That name is taken. Pick another.'
+    default:
+      if (err.status === 401) return 'That token is not valid.'
+      if (err.status === 429) return 'Too many projects created from here. Try again later.'
+      return err.code || `Failed (${err.status}).`
+  }
+}
+
+function Landing({ onSignIn, onCreateClick, error, busy }) {
+  const [mode, setMode] = useState(null) // null | 'token'
   const [value, setValue] = useState('')
+
   return (
     <div className="grid min-h-screen place-items-center px-4">
       <motion.div
         initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={spring}
-        className="w-full max-w-sm"
+        className="w-full max-w-md"
       >
-        <div className="mb-7 text-center">
-          <div className="text-2xl font-bold tracking-tight">
+        <div className="mb-8 text-center">
+          <div className="text-3xl font-bold tracking-tight">
             go<span className="text-brand">rate</span>
           </div>
-          <p className="mt-1.5 text-[13px] text-faint">Rate limit console</p>
+          <p className="mt-2 text-[13px] text-faint">
+            Rate limiting for your app. One project, one token.
+          </p>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            onUnlock(value.trim())
-          }}
-          className="space-y-4 rounded-2xl border border-line bg-surface p-6"
-        >
-          <Field label="Admin token" hint="Held in this tab only — cleared when you close it.">
-            <input
-              type="password"
-              className={inputCls}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              placeholder="ADMIN_TOKEN"
-              autoFocus
-              autoComplete="off"
-            />
-          </Field>
-          {error && <p className="text-[12.5px] text-bad">{error}</p>}
-          <Button variant="primary" className="w-full" disabled={!value.trim() || busy}>
-            {busy ? 'Checking…' : 'Continue'}
-          </Button>
-        </form>
-        <p className="mt-4 text-center text-xs text-faint">{API_BASE}</p>
+        <AnimatePresence mode="wait">
+          {mode === null ? (
+            <motion.div
+              key="choose"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={spring}
+              className="space-y-3"
+            >
+              <Button variant="primary" className="w-full py-3" onClick={onCreateClick}>
+                Create a project
+              </Button>
+              <Button className="w-full py-3" onClick={() => setMode('token')}>
+                I already have a token
+              </Button>
+              {error && <p className="pt-1 text-center text-[12.5px] text-bad">{error}</p>}
+            </motion.div>
+          ) : (
+            <motion.form
+              key="token"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={spring}
+              onSubmit={(e) => {
+                e.preventDefault()
+                onSignIn(value.trim())
+              }}
+              className="space-y-4 rounded-2xl border border-line bg-surface p-6"
+            >
+              <Field label="Project token" hint="The token you were shown when the project was created.">
+                <input
+                  type="password"
+                  className={inputCls}
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="rl_yourproject_…"
+                  autoFocus
+                  autoComplete="off"
+                />
+              </Field>
+              {error && <p className="text-[12.5px] text-bad">{error}</p>}
+              <Button variant="primary" className="w-full" disabled={!value.trim() || busy}>
+                {busy ? 'Checking…' : 'Open project'}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setMode(null)}
+                className="mx-auto block text-xs text-faint hover:text-dim"
+              >
+                Back
+              </button>
+            </motion.form>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   )
 }
 
-function friendly(err) {
-  if (!(err instanceof ApiError)) return 'Something went wrong.'
-  switch (err.code) {
-    case 'unreachable':
-      return `Could not reach ${API_BASE}. The free instance can take 30–60s to wake — try again.`
-    case 'admin_api_disabled':
-      return 'The write API is off — ADMIN_TOKEN is not set on the service.'
-    case 'project_exists':
-      return 'A project with that name already exists.'
-    default:
-      if (err.status === 401) return 'Admin token rejected.'
-      if (err.status === 404) return 'Not found — the API may not have this route deployed yet.'
-      return err.code || `Failed (${err.status}).`
-  }
-}
-
 export default function App() {
   const [token, setTok] = useState(getToken())
-  const [gateError, setGateError] = useState('')
-  const [projects, setProjects] = useState(null)
-  const [selected, setSelected] = useState(null)
+  const [project, setProject] = useState(null)
+  const [landingError, setLandingError] = useState('')
+  const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   const [reveal, setReveal] = useState(null)
   const [toast, showToast] = useToast()
-  const [error, setError] = useState('')
 
   const refresh = useCallback(async () => {
     setError('')
     try {
-      const list = await listProjects()
-      setProjects(list)
-      return list
+      setProject(await loadProject())
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setToken('')
         setTok('')
-        setGateError('Admin token rejected.')
-        return null
+        setProject(null)
+        setLandingError('That token is no longer valid.')
+        return
       }
       setError(friendly(err))
-      setProjects([])
-      return null
     }
   }, [])
 
@@ -105,24 +135,27 @@ export default function App() {
     if (token) refresh()
   }, [token, refresh])
 
-  const unlock = async (value) => {
+  const signIn = async (value) => {
     setBusy(true)
-    setGateError('')
+    setLandingError('')
     setToken(value)
     try {
-      await listProjects()
+      const p = await loadProject()
+      setProject(p)
       setTok(value)
     } catch (err) {
       setToken('')
-      setGateError(friendly(err))
+      setLandingError(friendly(err))
     } finally {
       setBusy(false)
     }
   }
 
+  // Create the project, then sign in with the token it was given.
   const handleCreate = async (name, rules) => {
     setBusy(true)
     setError('')
+    setLandingError('')
     try {
       const key = await generateKey(name)
       await createProject({
@@ -140,25 +173,27 @@ export default function App() {
         })),
       })
       setNewOpen(false)
-      setReveal({ projectName: name, rawKey: key.raw })
-      const list = await refresh()
-      setSelected(list?.find((p) => p.name === name)?.id ?? null)
+      setReveal({ projectName: name, rawKey: key.raw, kind: 'project' })
+      setToken(key.raw)
+      setTok(key.raw)
       return true
     } catch (err) {
-      setError(friendly(err))
+      const message = friendly(err)
+      setError(message)
+      setLandingError(message)
       return false
     } finally {
       setBusy(false)
     }
   }
 
-  const handleMintKey = async (project) => {
+  const handleMintKey = async () => {
     setBusy(true)
     setError('')
     try {
       const key = await generateKey(project.name)
-      await addKey(project.id, { key_hash: key.hash, key_prefix: key.prefix })
-      setReveal({ projectName: project.name, rawKey: key.raw })
+      await mintKey({ key_hash: key.hash, key_prefix: key.prefix, role: 'check' })
+      setReveal({ projectName: project.name, rawKey: key.raw, kind: 'api' })
       await refresh()
     } catch (err) {
       setError(friendly(err))
@@ -167,11 +202,11 @@ export default function App() {
     }
   }
 
-  const handleRevoke = async (project, key) => {
+  const handleRevoke = async (_project, key) => {
     if (!confirm(`Revoke ${key.prefix}…? Anything using it stops working immediately.`)) return
     setBusy(true)
     try {
-      await revokeKey(project.id, key.id)
+      await revokeKey(key.id)
       showToast('Key revoked')
       await refresh()
     } catch (err) {
@@ -181,51 +216,58 @@ export default function App() {
     }
   }
 
-  if (!token) return <Gate onUnlock={unlock} error={gateError} busy={busy} />
+  const signOut = () => {
+    setToken('')
+    setTok('')
+    setProject(null)
+    setError('')
+  }
 
-  const current = projects?.find((p) => p.id === selected) ?? null
+  if (!token) {
+    return (
+      <>
+        <Landing
+          onSignIn={signIn}
+          onCreateClick={() => setNewOpen(true)}
+          error={landingError}
+          busy={busy}
+        />
+        <NewProject open={newOpen} busy={busy} onClose={() => setNewOpen(false)} onCreate={handleCreate} />
+        <KeyReveal
+          open={!!reveal}
+          projectName={reveal?.projectName ?? ''}
+          rawKey={reveal?.rawKey ?? ''}
+          kind={reveal?.kind}
+          onClose={() => setReveal(null)}
+          onCopied={() => showToast('Token copied')}
+        />
+        <Toast message={toast} />
+      </>
+    )
+  }
 
   return (
     <div className="min-h-screen">
       <header className="aurora relative border-b border-line bg-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-3.5">
-          <button
-            onClick={() => setSelected(null)}
-            className="text-[15px] font-bold tracking-tight transition hover:opacity-80"
-          >
+          <span className="text-[15px] font-bold tracking-tight">
             go<span className="text-brand">rate</span>
-          </button>
-
-          <AnimatePresence>
-            {current && (
-              <motion.div
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -8 }}
-                transition={spring}
-                className="flex items-center gap-2 text-[13px] text-faint"
-              >
-                <span>/</span>
-                <span className="text-ink">{current.name}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
+          </span>
+          {project && (
+            <motion.span
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={spring}
+              className="flex items-center gap-2 text-[13px] text-faint"
+            >
+              <span>/</span>
+              <span className="text-ink">{project.name}</span>
+            </motion.span>
+          )}
           <div className="flex-1" />
           {busy && <Spinner />}
-          <Button variant="primary" onClick={() => setNewOpen(true)}>
-            + New project
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setToken('')
-              setTok('')
-              setProjects(null)
-              setSelected(null)
-            }}
-          >
-            Lock
+          <Button variant="ghost" onClick={signOut}>
+            Sign out
           </Button>
         </div>
       </header>
@@ -245,92 +287,30 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {projects === null ? (
+        {!project ? (
           <div className="flex items-center gap-3 py-20 text-[13px] text-faint">
-            <Spinner /> Loading projects…
+            <Spinner /> Loading project…
           </div>
-        ) : current ? (
+        ) : (
           <ProjectDetail
-            project={current}
+            project={project}
             busy={busy}
             onMintKey={handleMintKey}
             onRevokeKey={handleRevoke}
           />
-        ) : (
-          <>
-            <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-faint">
-              Projects ({projects.length})
-            </h2>
-            <motion.div layout className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <AnimatePresence initial={false}>
-                {projects.map((p, i) => (
-                  <motion.button
-                    key={p.id}
-                    layout
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0, transition: { ...spring, delay: i * 0.04 } }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    whileHover={{ y: -4 }}
-                    whileTap={{ scale: 0.99 }}
-                    transition={spring}
-                    onClick={() => setSelected(p.id)}
-                    className="rounded-2xl border border-line bg-surface p-5 text-left transition hover:border-brand"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">{p.name}</span>
-                      {p.status === 'active' ? (
-                        <Pill tone="good">active</Pill>
-                      ) : (
-                        <Pill tone="bad">{p.status}</Pill>
-                      )}
-                    </div>
-                    <div className="mt-3 space-y-1 text-[12.5px] text-faint">
-                      <div>
-                        {p.rule_count} {p.rule_count === 1 ? 'rule' : 'rules'} ·{' '}
-                        {(p.keys ?? []).filter((k) => k.status === 'active').length} active{' '}
-                        {(p.keys ?? []).filter((k) => k.status === 'active').length === 1
-                          ? 'key'
-                          : 'keys'}
-                      </div>
-                      <div>created {new Date(p.created_at).toLocaleDateString()}</div>
-                    </div>
-                  </motion.button>
-                ))}
-              </AnimatePresence>
-
-              <motion.button
-                layout
-                whileHover={{ y: -4 }}
-                whileTap={{ scale: 0.99 }}
-                transition={spring}
-                onClick={() => setNewOpen(true)}
-                className="grid min-h-[132px] place-items-center rounded-2xl border border-dashed border-line bg-transparent p-5 text-center text-faint transition hover:border-brand hover:text-dim"
-              >
-                <div>
-                  <div className="text-xl">+</div>
-                  <div className="mt-1 text-[13px]">New project</div>
-                  <div className="mt-0.5 text-xs">rules + key in one step</div>
-                </div>
-              </motion.button>
-            </motion.div>
-          </>
         )}
       </main>
 
-      <NewProject
-        open={newOpen}
-        busy={busy}
-        onClose={() => setNewOpen(false)}
-        onCreate={handleCreate}
-      />
       <KeyReveal
         open={!!reveal}
         projectName={reveal?.projectName ?? ''}
         rawKey={reveal?.rawKey ?? ''}
+        kind={reveal?.kind}
         onClose={() => setReveal(null)}
-        onCopied={() => showToast('Key copied')}
+        onCopied={() => showToast('Copied')}
       />
       <Toast message={toast} />
+      <p className="pb-8 text-center text-[11px] text-faint">{API_BASE.replace(/^https?:\/\//, '')}</p>
     </div>
   )
 }
